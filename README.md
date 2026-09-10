@@ -1,118 +1,155 @@
-# Plasma Screen Manager
+# Screen Manager for KDE Plasma 6
 
-A sleek, intuitive desktop widget for **KDE Plasma 6** on Wayland (tested on Bazzite & Fedora Kinoite) providing fast, one-click multi-monitor management and presentation mode.
+A sleek, intuitive desktop widget for **KDE Plasma 6** on Wayland providing fast, one-click multi-monitor management, inline display renaming, and presentation mode.
 
-Designed as a modern replacement for the default KDE display widget, it puts monitor layout, primary display assignment, power toggling, and sleep inhibition directly on your desktop.
+Designed as a modern, productive replacement for standard display applets, it brings monitor layout control, primary display assignment, power toggling, sleep inhibition, and custom screen nicknames right to your desktop.
+
+---
+
+## Screenshots
+
+<div align="center">
+
+### Overview & Spatial Layout
+![Screen Manager Overview](docs/screenshots/overview.png)
+
+<br/>
+
+| Inline Display Renaming | Primary Display & Quick Controls |
+| :---: | :---: |
+| ![Inline Renaming](docs/screenshots/inline-rename.png) | ![Quick Controls](docs/screenshots/quick-controls.png) |
+| *Click any screen label to edit friendly names, or click **X** to reset* | *One-click primary monitor toggle, sleep inhibitor, and display power* |
+
+</div>
 
 ---
 
 ## Features
 
-- **Side-by-Side Spatial Layout**: Renders connected displays horizontally ordered by their physical left-to-right desktop geometry (`pos.x`).
-- **Hardware-Agnostic Device Detection**: Dynamically parses standard VESA EDID descriptor blocks (`/sys/class/drm/*/edid`) to discover device names (Samsung, LG, Dell, Epson, ASUS, BenQ, etc.) without hardcoding.
-- **Primary Monitor Selector (Star)**: One-click primary display assignment (`priority 1` via `kscreen-doctor`), with active visual glow and a `PRIMARY` badge.
-- **Display Output Toggle (Eye)**: Quickly turn monitors on or off on demand.
-- **Safety Lockout Protection**: Built-in guard prevents disabling the only remaining active display to protect you from black-screen lockouts.
-- **Presentation Mode (Keep Awake)**: Top-right toggle inhibits system sleep and screen dimming/locking via `systemd-inhibit` (ideal for gaming, media playback, presentations).
-- **Smart Auto-Refresh on Hover**: Moving your mouse cursor over the widget automatically triggers a background refresh (throttled to avoid redundant queries).
-- **Periodic Background Sync**: Runs every 20 seconds to detect hotplugged or disconnected displays.
-- **Dedicated Vector SVG Icons**: High-contrast, clean vector assets that remain pixel-perfect regardless of the active desktop icon theme.
-- **Custom Name Aliases**: Optional user-defined nicknames in `~/.config/plasma-screen-manager/aliases.json`.
+- 🖥️ **Side-by-Side Spatial Layout**: Renders connected displays horizontally ordered by their physical desktop coordinates (`pos.x`).
+- ✏️ **Inline Screen Renaming**: Hover over any monitor label to reveal the text cursor (`I-beam`), click to edit custom nicknames inline, and press <kbd>Enter</kbd> to save.
+- 🔄 **One-Click Reset to Default (X)**: A smooth hover-reveal **X** button lets you instantly revert any custom nickname back to the clean hardware default name.
+- 🏷️ **Dynamic Hardware & Linux PnP DB Detection**: Dynamically parses standard VESA EDID blocks (`/sys/class/drm/*/edid`) and resolves vendor names via the Linux hardware database (`/usr/share/hwdata/pnp.ids`) with clean model name extraction and fallback.
+- ⭐ **Primary Monitor Selector (Star)**: Assign the primary display with a single click (`priority 1` via `kscreen-doctor`), highlighted with an active cyan border, ambient glow, and a `PRIMARY` badge.
+- 👁️ **Display Output Power Toggle (Eye)**: Quickly turn external displays or projectors on or off on demand.
+- 🛡️ **Blackout Safety Protection**: Built-in guard prevents turning off the only remaining active display, protecting you from accidental black-screen lockouts.
+- ☕ **Presentation Mode (Keep Awake)**: Top bar toggle inhibits system idle sleep, screen dimming, and lock screen timeouts via `systemd-inhibit` (ideal for gaming, movie playback, or presentations).
+- ⚡ **Non-Intrusive Background Sync**: 30-second periodic background polling automatically discovers hotplugged displays without dimming or interrupting user interactions.
+- 🎨 **Pixel-Perfect Vector Graphics**: Custom inline SVG icons and smooth state transitions that integrate seamlessly with Plasma dark and light color schemes.
 
 ---
 
 ## Requirements
 
 - **Desktop Environment**: KDE Plasma 6.x (Wayland session)
-- **Tools**: `kscreen-doctor`, `systemd-inhibit`, Python 3
-- **Tested Distributions**: Bazzite (Fedora Silverblue/Kinoite 40+), Fedora 40/41/42+ KDE
+- **Dependencies**:
+  - `kscreen-doctor` (included with KDE Plasma / KScreen)
+  - `systemd-inhibit` (standard on systemd-based Linux systems)
+  - Python 3.8+
+- **Tested On**:
+  - Bazzite (Fedora Silverblue / Atomic Desktop)
+  - Fedora 40 / 41 / 42 (KDE Spin)
+  - Arch Linux / openSUSE Tumbleweed (KDE Plasma 6)
 
 ---
 
 ## Installation
 
-### Option A: Download Pre-built `.plasmoid` (Recommended)
+### Method 1: Automated Script (Recommended)
 
-1. Download the latest `org.scyan.screenmanager-v1.x.plasmoid` from the [Releases](../../releases) page.
-2. Install it with:
-   ```bash
-   kpackagetool6 --type Plasma/Applet --install org.scyan.screenmanager-v*.plasmoid
-   ```
-   *(Or in Plasma: Right-click Desktop -> **Add Widgets...** -> **Get New Widgets** -> **Install from Local File...** and select the `.plasmoid` file).*
-
-### Option B: Install from Source
+Clone the repository and run the installation script:
 
 ```bash
-git clone https://github.com/yourusername/plasma-screen-manager.git
+git clone https://github.com/Scyan/plasma-screen-manager.git
 cd plasma-screen-manager
 ./install.sh
 ```
 
-### 3. Add to your desktop
-1. Right-click on your desktop wallpaper.
-2. Select **"Add Widgets..."** (or press `Meta` + `W`).
-3. Search for **"Screen Manager"**.
-4. Drag and drop it onto your desktop or panel.
+The script automatically:
+1. Installs the plasmoid to `~/.local/share/plasma/plasmoids/org.scyan.screenmanager/`
+2. Updates the system configuration cache (`kbuildsycoca6`)
+3. Restarts the Plasma shell to load the new code immediately (with Flatpak/container detection support)
+
+### Method 2: Download Pre-Built `.plasmoid`
+
+1. Grab the latest `org.scyan.screenmanager-v*.plasmoid` package from the [Releases](../../releases) page.
+2. Install via command-line:
+   ```bash
+   kpackagetool6 --type Plasma/Applet --install org.scyan.screenmanager-v*.plasmoid
+   ```
+   *Or install through the Plasma GUI:*
+   - Right-click Desktop $\rightarrow$ **Add Widgets...** $\rightarrow$ **Get New Widgets** $\rightarrow$ **Install from Local File...** and select the `.plasmoid` file.
 
 ---
 
-## Manual Installation
+## Adding the Widget to Your Desktop
 
-To install without running the script, copy the repository folder into your user plasmoids directory:
+1. Right-click on your desktop wallpaper (or panel).
+2. Select **"Add Widgets..."** (or press <kbd>Meta</kbd> + <kbd>W</kbd>).
+3. Search for **"Screen Manager"**.
+4. Drag and drop the widget onto your desktop or into your Plasma panel.
 
-```bash
-mkdir -p ~/.local/share/plasma/plasmoids/
-cp -r . ~/.local/share/plasma/plasmoids/org.scyan.screenmanager
-kbuildsycoca6 --noincremental
+---
+
+## Custom Display Aliases (Persistent Config)
+
+Renaming displays via the widget saves persistent nicknames in:
+```
+~/.config/plasma-screen-manager/aliases.json
 ```
 
----
-
-## Custom Display Aliases
-
-If you wish to override detected hardware names with custom friendly labels:
-
-Create or edit `~/.config/plasma-screen-manager/aliases.json`:
-
+Example format:
 ```json
 {
-  "HDMI-A-2": "SAMSUNG NEO 8",
-  "DP-1": "EPSON PROJECTOR"
+  "HDMI-A-2": "Odyssey G8",
+  "DP-1": "Epson EB-810"
 }
 ```
 
-The widget will prioritize your aliases and seamlessly fall back to EDID hardware model strings for any other attached screens.
+You can edit this file manually if desired, or manage your labels entirely through the widget's inline editor.
 
 ---
 
-## Architecture
+## Project Structure
 
 ```
 plasma-screen-manager/
-├── metadata.json                          # KDE Plasma 6 Applet descriptor
-├── install.sh                             # Fast installation helper
+├── metadata.json                          # KDE Plasma 6 Applet descriptor & metadata
+├── install.sh                             # Development & user install script
+├── LICENSE                                # MIT License
+├── README.md                              # Documentation & screenshots
+├── docs/
+│   └── screenshots/                       # High-resolution UI screenshots
 ├── contents/
 │   ├── config/
-│   │   └── main.xml                       # Plasma configuration schema
+│   │   └── main.xml                       # Plasmoid configuration schema
 │   ├── scripts/
-│   │   └── screen_ctl.py                  # Python backend (EDID parser, kscreen-doctor, DBus)
+│   │   └── screen_ctl.py                  # Python backend (EDID parser, PnP DB, kscreen-doctor)
 │   └── ui/
-│       ├── main.qml                       # Primary widget container & top bar
-│       ├── ScreenCard.qml                 # Individual monitor card component
-│       ├── configGeneral.qml              # Settings configuration dialog
+│       ├── main.qml                       # Top bar, periodic timers, command runner
+│       ├── ScreenCard.qml                 # Screen monitor card, inline rename, controls
+│       ├── configGeneral.qml              # Settings dialog
 │       └── assets/                        # Dedicated vector SVG icons
+│           ├── clear.svg
 │           ├── eye.svg
 │           ├── eye-off.svg
-│           ├── star-filled.svg
-│           ├── star-outline.svg
 │           ├── monitor.svg
-│           ├── refresh.svg
 │           ├── presentation.svg
-│           └── presentation-active.svg
+│           ├── presentation-active.svg
+│           ├── refresh.svg
+│           ├── star-filled.svg
+│           └── star-outline.svg
 ```
+
+---
+
+## Contributing
+
+Pull requests, issues, and feature suggestions are warmly welcome!
+If you find a bug or have a suggestion, feel free to open an issue.
 
 ---
 
 ## License
 
-MIT License. Feel free to use, modify, and distribute.
+This project is licensed under the [MIT License](LICENSE).
