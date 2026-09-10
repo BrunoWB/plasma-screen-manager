@@ -17,10 +17,8 @@ if command -v kbuildsycoca6 >/dev/null 2>&1; then
     kbuildsycoca6 --noincremental
 fi
 
-echo "Refreshing Plasma shell..."
-if command -v qdbus-qt6 >/dev/null 2>&1; then
-    qdbus-qt6 org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell.refreshCurrentShell 2>/dev/null || true
-fi
+echo "Restarting Plasma shell..."
+systemctl --user restart plasma-plasmashell.service 2>/dev/null || true
 
 echo "Successfully installed to ${TARGET_DIR}!"
 echo "Add it from your desktop: Right-click Desktop -> 'Add Widgets...' -> search 'Screen Manager'."
