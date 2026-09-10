@@ -31,14 +31,20 @@ Designed as a modern replacement for the default KDE display widget, it puts mon
 
 ## Installation
 
-### 1. Clone the repository
+### Option A: Download Pre-built `.plasmoid` (Recommended)
+
+1. Download the latest `org.scyan.screenmanager-v1.x.plasmoid` from the [Releases](../../releases) page.
+2. Install it with:
+   ```bash
+   kpackagetool6 --type Plasma/Applet --install org.scyan.screenmanager-v*.plasmoid
+   ```
+   *(Or in Plasma: Right-click Desktop -> **Add Widgets...** -> **Get New Widgets** -> **Install from Local File...** and select the `.plasmoid` file).*
+
+### Option B: Install from Source
+
 ```bash
 git clone https://github.com/yourusername/plasma-screen-manager.git
 cd plasma-screen-manager
-```
-
-### 2. Run the installer
-```bash
 ./install.sh
 ```
 
