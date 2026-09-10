@@ -24,21 +24,6 @@ Designed as a modern, productive replacement for standard display applets, it br
 
 ---
 
-## Features
-
-- 🖥️ **Side-by-Side Spatial Layout**: Renders connected displays horizontally ordered by their physical desktop coordinates (`pos.x`).
-- ✏️ **Inline Screen Renaming**: Hover over any monitor label to reveal the text cursor (`I-beam`), click to edit custom nicknames inline, and press <kbd>Enter</kbd> to save.
-- 🔄 **One-Click Reset to Default (X)**: A smooth hover-reveal **X** button lets you instantly revert any custom nickname back to the clean hardware default name.
-- 🏷️ **Dynamic Hardware & Linux PnP DB Detection**: Dynamically parses standard VESA EDID blocks (`/sys/class/drm/*/edid`) and resolves vendor names via the Linux hardware database (`/usr/share/hwdata/pnp.ids`) with clean model name extraction and fallback.
-- ⭐ **Primary Monitor Selector (Star)**: Assign the primary display with a single click (`priority 1` via `kscreen-doctor`), highlighted with an active cyan border, ambient glow, and a `PRIMARY` badge.
-- 👁️ **Display Output Power Toggle (Eye)**: Quickly turn external displays or projectors on or off on demand.
-- 🛡️ **Blackout Safety Protection**: Built-in guard prevents turning off the only remaining active display, protecting you from accidental black-screen lockouts.
-- ☕ **Presentation Mode (Keep Awake)**: Top bar toggle inhibits system idle sleep, screen dimming, and lock screen timeouts via `systemd-inhibit` (ideal for gaming, movie playback, or presentations).
-- ⚡ **Non-Intrusive Background Sync**: 30-second periodic background polling automatically discovers hotplugged displays without dimming or interrupting user interactions.
-- 🎨 **Pixel-Perfect Vector Graphics**: Custom inline SVG icons and smooth state transitions that integrate seamlessly with Plasma dark and light color schemes.
-
----
-
 ## Requirements
 
 - **Desktop Environment**: KDE Plasma 6.x (Wayland session)
@@ -88,58 +73,6 @@ The script automatically:
 2. Select **"Add Widgets..."** (or press <kbd>Meta</kbd> + <kbd>W</kbd>).
 3. Search for **"Screen Manager"**.
 4. Drag and drop the widget onto your desktop or into your Plasma panel.
-
----
-
-## Custom Display Aliases (Persistent Config)
-
-Renaming displays via the widget saves persistent nicknames in:
-```
-~/.config/plasma-screen-manager/aliases.json
-```
-
-Example format:
-```json
-{
-  "HDMI-A-2": "Odyssey G8",
-  "DP-1": "Epson EB-810"
-}
-```
-
-You can edit this file manually if desired, or manage your labels entirely through the widget's inline editor.
-
----
-
-## Project Structure
-
-```
-plasma-screen-manager/
-├── metadata.json                          # KDE Plasma 6 Applet descriptor & metadata
-├── install.sh                             # Development & user install script
-├── LICENSE                                # MIT License
-├── README.md                              # Documentation & screenshots
-├── docs/
-│   └── screenshots/                       # High-resolution UI screenshots
-├── contents/
-│   ├── config/
-│   │   └── main.xml                       # Plasmoid configuration schema
-│   ├── scripts/
-│   │   └── screen_ctl.py                  # Python backend (EDID parser, PnP DB, kscreen-doctor)
-│   └── ui/
-│       ├── main.qml                       # Top bar, periodic timers, command runner
-│       ├── ScreenCard.qml                 # Screen monitor card, inline rename, controls
-│       ├── configGeneral.qml              # Settings dialog
-│       └── assets/                        # Dedicated vector SVG icons
-│           ├── clear.svg
-│           ├── eye.svg
-│           ├── eye-off.svg
-│           ├── monitor.svg
-│           ├── presentation.svg
-│           ├── presentation-active.svg
-│           ├── refresh.svg
-│           ├── star-filled.svg
-│           └── star-outline.svg
-```
 
 ---
 
