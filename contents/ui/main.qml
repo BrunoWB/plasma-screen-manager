@@ -13,11 +13,15 @@ PlasmoidItem {
 
     readonly property string scriptPath: Qt.resolvedUrl("../scripts/screen_ctl.py").toString().replace("file://", "")
     readonly property bool autoRefreshOnHover: Plasmoid.configuration.autoRefreshOnHover !== undefined ? Plasmoid.configuration.autoRefreshOnHover : true
-    readonly property int pollIntervalSeconds: Plasmoid.configuration.pollInterval ? Plasmoid.configuration.pollInterval : 20
 
     property var displayList: []
     property bool presentationActive: false
-    property bool isFetching: false
+    
+    // Fetch Modes: "none", "shy" (silent background), "imposing" (dimmed + spinning + banner)
+    property string fetchMode: "none"
+    readonly property bool isFetching: fetchMode !== "none"
+    readonly property bool isImposing: fetchMode === "imposing"
+    
     property double lastFetchTime: 0
     property string statusMessage: ""
 
@@ -41,7 +45,7 @@ PlasmoidItem {
         onNewData: (sourceName, data) => {
             var stdout = data["stdout"] || "";
             disconnectSource(sourceName);
-            root.isFetching = false;
+            root.fetchMode = "none";
 
             if (!stdout || stdout.trim().length === 0) {
                 return;
@@ -65,22 +69,26 @@ PlasmoidItem {
         }
     }
 
-    function runCommand(args) {
-        root.isFetching = true;
+    function runCommand(args, mode) {
+        root.fetchMode = mode || "imposing";
         var cmd = "python3 \"" + root.scriptPath + "\" " + args + " # " + Date.now();
         executable.connectSource(cmd);
     }
 
-    function fetchStatus(force) {
+    function fetchStatus(mode) {
+        var reqMode = mode || "imposing";
         var now = Date.now();
-        if (!force && (now - root.lastFetchTime < 4000)) {
+        
+        // Prevent rapid consequent fetches: if last fetch was less than 5 seconds ago, ignore
+        if (now - root.lastFetchTime < 5000) {
             return;
         }
-        runCommand("status");
+        
+        runCommand("status", reqMode);
     }
 
     function setPrimaryScreen(connector) {
-        runCommand("set-primary " + connector);
+        runCommand("set-primary " + connector, "imposing");
     }
 
     function toggleScreenEnabled(connector, currentEnabled) {
@@ -95,25 +103,32 @@ PlasmoidItem {
             return;
         }
         var nextState = currentEnabled ? "0" : "1";
-        runCommand("set-enabled " + connector + " " + nextState);
+        runCommand("set-enabled " + connector + " " + nextState, "imposing");
     }
 
     function togglePresentation() {
-        runCommand("toggle-presentation");
+        runCommand("toggle-presentation", "imposing");
     }
 
     Component.onCompleted: {
-        fetchStatus(true);
+        // Initial load: fetch immediately
+        runCommand("status", "shy");
     }
 
+    // Periodic Background Sync: 30-second interval with SHY state (no dimming, no spinner, unclickable for 75ms)
     Timer {
         id: periodicTimer
-        interval: Math.max(5000, root.pollIntervalSeconds * 1000)
+        interval: 30000 // 30 seconds
         running: true
         repeat: true
-        onTriggered: root.fetchStatus(false)
+        onTriggered: {
+            if (!root.isFetching) {
+                root.fetchStatus("shy");
+            }
+        }
     }
 
+    // Compact Representation (Taskbar / Panel)
     compactRepresentation: Item {
         Image {
             anchors.centerIn: parent
@@ -127,10 +142,12 @@ PlasmoidItem {
         }
     }
 
+    // Full Representation (Desktop Widget)
     fullRepresentation: Item {
         id: fullRepItem
         anchors.fill: parent
 
+        // Main Card
         Rectangle {
             anchors.fill: parent
             radius: 14
@@ -139,12 +156,13 @@ PlasmoidItem {
             border.width: 1
         }
 
+        // Hover detection: Auto-refresh with IMPOSING state when mouse enters widget on desktop
         HoverHandler {
             id: mainHover
             enabled: root.autoRefreshOnHover
             onHoveredChanged: {
-                if (hovered) {
-                    root.fetchStatus(false);
+                if (hovered && !root.isFetching) {
+                    root.fetchStatus("imposing");
                 }
             }
         }
@@ -154,16 +172,19 @@ PlasmoidItem {
             anchors.margins: 14
             spacing: 10
 
+            // Top Bar
             RowLayout {
                 Layout.fillWidth: true
                 spacing: 8
 
+                // Header Icon
                 Image {
                     source: "assets/monitor.svg"
                     sourceSize.width: 17
                     sourceSize.height: 17
                 }
 
+                // Title
                 Text {
                     text: "Screen Manager"
                     color: "#f0f4f8"
@@ -172,8 +193,9 @@ PlasmoidItem {
                     font.letterSpacing: 0.2
                 }
 
+                // Status Pill: only shows on IMPOSING state or on error notice (never on shy)
                 Rectangle {
-                    visible: root.isFetching || root.statusMessage.length > 0
+                    visible: root.isImposing || root.statusMessage.length > 0
                     radius: 8
                     color: root.statusMessage.length > 0 ? Qt.rgba(1.0, 0.2, 0.3, 0.15) : Qt.rgba(0, 0.8, 1.0, 0.14)
                     border.color: root.statusMessage.length > 0 ? "#ff5555" : Qt.rgba(0, 0.8, 1.0, 0.35)
@@ -181,12 +203,17 @@ PlasmoidItem {
                     implicitWidth: statusText.implicitWidth + 14
                     implicitHeight: 20
 
+                    opacity: visible ? 1.0 : 0.0
+                    Behavior on opacity {
+                        NumberAnimation { duration: 250; easing.type: Easing.InOutQuad }
+                    }
+
                     RowLayout {
                         anchors.centerIn: parent
                         spacing: 5
 
                         Rectangle {
-                            visible: root.isFetching && root.statusMessage.length === 0
+                            visible: root.isImposing && root.statusMessage.length === 0
                             width: 6
                             height: 6
                             radius: 3
@@ -205,16 +232,21 @@ PlasmoidItem {
 
                 Item { Layout.fillWidth: true }
 
+                // Presentation Mode Toggle Button
                 Rectangle {
                     id: presBtn
                     implicitWidth: 30
                     implicitHeight: 30
                     radius: 7
-                    color: root.presentationActive ? Qt.rgba(0, 0.78, 1.0, 0.22) : (presMouse.containsMouse ? "#1e2430" : "#161a22")
-                    border.color: root.presentationActive ? "#00c8ff" : (presMouse.containsMouse ? "#3b4458" : "#2a3040")
+                    color: root.presentationActive ? Qt.rgba(0, 0.78, 1.0, 0.22) : (presMouse.containsMouse && !root.isFetching ? "#1e2430" : "#161a22")
+                    border.color: root.presentationActive ? "#00c8ff" : (presMouse.containsMouse && !root.isFetching ? "#3b4458" : "#2a3040")
                     border.width: 1
                     enabled: !root.isFetching
-                    opacity: enabled ? 1.0 : 0.5
+
+                    opacity: root.isImposing ? 0.45 : 1.0
+                    Behavior on opacity {
+                        NumberAnimation { duration: 250; easing.type: Easing.InOutQuad }
+                    }
 
                     Image {
                         anchors.centerIn: parent
@@ -223,27 +255,37 @@ PlasmoidItem {
                         sourceSize.height: 16
                     }
 
-                    QQC2.ToolTip.visible: presMouse.containsMouse
+                    QQC2.ToolTip.visible: presMouse.containsMouse && !root.isFetching
                     QQC2.ToolTip.text: root.presentationActive ? "Presentation Mode: Active (Sleep blocked)\nClick to turn off" : "Presentation Mode: Inactive\nClick to keep screens awake"
 
                     MouseArea {
                         id: presMouse
                         anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: root.togglePresentation()
+                        hoverEnabled: !root.isFetching
+                        cursorShape: root.isFetching ? Qt.ArrowCursor : Qt.PointingHandCursor
+                        onClicked: {
+                            if (!root.isFetching) {
+                                root.togglePresentation();
+                            }
+                        }
                     }
                 }
 
+                // Refresh Button
                 Rectangle {
                     id: refreshBtn
                     implicitWidth: 30
                     implicitHeight: 30
                     radius: 7
-                    color: refMouse.containsMouse ? "#1e2430" : "#161a22"
-                    border.color: refMouse.containsMouse ? "#3b4458" : "#2a3040"
+                    color: refMouse.containsMouse && !root.isFetching ? "#1e2430" : "#161a22"
+                    border.color: refMouse.containsMouse && !root.isFetching ? "#3b4458" : "#2a3040"
                     border.width: 1
                     enabled: !root.isFetching
+
+                    opacity: root.isImposing ? 0.45 : 1.0
+                    Behavior on opacity {
+                        NumberAnimation { duration: 250; easing.type: Easing.InOutQuad }
+                    }
 
                     Image {
                         id: refreshImg
@@ -252,28 +294,34 @@ PlasmoidItem {
                         sourceSize.width: 15
                         sourceSize.height: 15
 
+                        // Only spin when imposing (manual click or hover), NOT on shy background poll
                         RotationAnimation on rotation {
                             from: 0
                             to: 360
                             duration: 700
                             loops: Animation.Infinite
-                            running: root.isFetching
+                            running: root.isImposing
                         }
                     }
 
-                    QQC2.ToolTip.visible: refMouse.containsMouse
+                    QQC2.ToolTip.visible: refMouse.containsMouse && !root.isFetching
                     QQC2.ToolTip.text: "Refresh Displays"
 
                     MouseArea {
                         id: refMouse
                         anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: root.fetchStatus(true)
+                        hoverEnabled: !root.isFetching
+                        cursorShape: root.isFetching ? Qt.ArrowCursor : Qt.PointingHandCursor
+                        onClicked: {
+                            if (!root.isFetching) {
+                                root.fetchStatus("imposing");
+                            }
+                        }
                     }
                 }
             }
 
+            // Separator Line
             Rectangle {
                 Layout.fillWidth: true
                 height: 1
@@ -281,10 +329,12 @@ PlasmoidItem {
                 opacity: 0.6
             }
 
+            // Main Displays Container
             Item {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
 
+                // Displays Side by Side Row
                 RowLayout {
                     anchors.centerIn: parent
                     spacing: 14
@@ -296,12 +346,14 @@ PlasmoidItem {
                         ScreenCard {
                             screenData: modelData
                             isFetching: root.isFetching
+                            isImposing: root.isImposing
                             onRequestSetPrimary: (connector) => root.setPrimaryScreen(connector)
                             onRequestToggleEnabled: (connector, currentEnabled) => root.toggleScreenEnabled(connector, currentEnabled)
                         }
                     }
                 }
 
+                // Empty / Loading state
                 ColumnLayout {
                     anchors.centerIn: parent
                     visible: root.displayList.length === 0

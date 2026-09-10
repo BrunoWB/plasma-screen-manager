@@ -7,6 +7,7 @@ Item {
 
     property var screenData: ({})
     property bool isFetching: false
+    property bool isImposing: false
 
     signal requestSetPrimary(string connector)
     signal requestToggleEnabled(string connector, bool currentEnabled)
@@ -33,6 +34,12 @@ Item {
             color: isEnabled ? (isPrimary ? "#181d26" : "#141820") : "#0e1015"
             border.color: isPrimary ? "#00c8ff" : (isEnabled ? "#2b3345" : "#1b202c")
             border.width: isPrimary ? 2 : 1
+
+            // Smooth opacity transition for imposing state
+            opacity: isImposing ? 0.45 : (isEnabled ? 1.0 : 0.6)
+            Behavior on opacity {
+                NumberAnimation { duration: 250; easing.type: Easing.InOutQuad }
+            }
 
             // Subtle glow when primary
             Rectangle {
@@ -145,9 +152,13 @@ Item {
                 implicitWidth: 32
                 implicitHeight: 32
                 radius: 16
-                color: starMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.08) : "transparent"
-                opacity: isFetching ? 0.4 : (isEnabled ? 1.0 : 0.3)
+                color: starMouse.containsMouse && !isFetching ? Qt.rgba(1, 1, 1, 0.08) : "transparent"
                 enabled: !isFetching && isEnabled
+
+                opacity: isImposing ? 0.45 : (isEnabled ? 1.0 : 0.3)
+                Behavior on opacity {
+                    NumberAnimation { duration: 250; easing.type: Easing.InOutQuad }
+                }
 
                 Image {
                     anchors.centerIn: parent
@@ -156,16 +167,16 @@ Item {
                     sourceSize.height: 18
                 }
 
-                QQC2.ToolTip.visible: starMouse.containsMouse
+                QQC2.ToolTip.visible: starMouse.containsMouse && !isFetching
                 QQC2.ToolTip.text: isPrimary ? "Primary Display" : "Click to set as Primary Display"
 
                 MouseArea {
                     id: starMouse
                     anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
+                    hoverEnabled: !isFetching
+                    cursorShape: isFetching ? Qt.ArrowCursor : Qt.PointingHandCursor
                     onClicked: {
-                        if (!isPrimary && isEnabled) {
+                        if (!isPrimary && isEnabled && !isFetching) {
                             cardRoot.requestSetPrimary(connector);
                         }
                     }
@@ -178,9 +189,13 @@ Item {
                 implicitWidth: 32
                 implicitHeight: 32
                 radius: 16
-                color: eyeMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.08) : "transparent"
-                opacity: isFetching ? 0.4 : 1.0
+                color: eyeMouse.containsMouse && !isFetching ? Qt.rgba(1, 1, 1, 0.08) : "transparent"
                 enabled: !isFetching
+
+                opacity: isImposing ? 0.45 : 1.0
+                Behavior on opacity {
+                    NumberAnimation { duration: 250; easing.type: Easing.InOutQuad }
+                }
 
                 Image {
                     anchors.centerIn: parent
@@ -189,16 +204,18 @@ Item {
                     sourceSize.height: 20
                 }
 
-                QQC2.ToolTip.visible: eyeMouse.containsMouse
+                QQC2.ToolTip.visible: eyeMouse.containsMouse && !isFetching
                 QQC2.ToolTip.text: isEnabled ? "Display is Enabled (Click to turn off)" : "Display is Disabled (Click to turn on)"
 
                 MouseArea {
                     id: eyeMouse
                     anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
+                    hoverEnabled: !isFetching
+                    cursorShape: isFetching ? Qt.ArrowCursor : Qt.PointingHandCursor
                     onClicked: {
-                        cardRoot.requestToggleEnabled(connector, isEnabled);
+                        if (!isFetching) {
+                            cardRoot.requestToggleEnabled(connector, isEnabled);
+                        }
                     }
                 }
             }
