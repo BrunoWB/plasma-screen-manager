@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 import sys
 import os
+import re
+import shutil
 import json
 import glob
 import subprocess
@@ -11,15 +13,151 @@ CACHE_DIR = os.path.expanduser("~/.cache/plasma-screen-manager")
 PID_FILE = os.path.join(CACHE_DIR, "inhibit.pid")
 ALIASES_FILE = os.path.join(CONFIG_DIR, "aliases.json")
 
-PNP_VENDORS = {
-    "SAM": "Samsung", "SEC": "Epson", "DEL": "Dell", "LGX": "LG",
-    "LGD": "LG", "GSM": "LG", "AUS": "ASUS", "ASU": "ASUS",
-    "ACR": "Acer", "BNQ": "BenQ", "AOC": "AOC", "SNY": "Sony",
-    "VSC": "ViewSonic", "HPQ": "HP", "HWP": "HP", "LEN": "Lenovo",
-    "APP": "Apple", "MSI": "MSI", "PHL": "Philips", "GIG": "Gigabyte",
-    "IVM": "Iiyama", "NEC": "NEC", "SHP": "Sharp", "TOS": "Toshiba",
-    "BOE": "BOE", "INN": "InnoLux", "AUO": "AUO"
+PNP_IDS_PATHS = [
+    "/usr/share/hwdata/pnp.ids",
+    "/run/host/usr/share/hwdata/pnp.ids",
+    "/usr/share/misc/pnp.ids",
+    "/run/host/usr/share/misc/pnp.ids",
+    "/var/lib/misc/pnp.ids",
+    "/run/host/var/lib/misc/pnp.ids",
+    "/usr/local/share/hwdata/pnp.ids",
+    "/run/host/usr/local/share/hwdata/pnp.ids",
+]
+
+GENERIC_WORDS = {
+    "inc", "incorporated", "ltd", "limited", "corp", "corporation",
+    "co", "company", "gmbh", "sa", "ag", "bv", "llc", "plc",
+    "technologies", "technology", "tech", "electronics", "electronic",
+    "electric", "computer", "computers", "group", "international",
+    "systems", "consumer", "display", "displays",
 }
+
+_PNP_DB_CACHE = None
+
+def get_pnp_db():
+    global _PNP_DB_CACHE
+    if _PNP_DB_CACHE is not None:
+        return _PNP_DB_CACHE
+
+    _PNP_DB_CACHE = {}
+    for path in PNP_IDS_PATHS:
+        if os.path.exists(path):
+            try:
+                with open(path, "r", encoding="utf-8", errors="ignore") as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line or line.startswith("#"):
+                            continue
+                        parts = line.split("\t", 1)
+                        if len(parts) == 2:
+                            code, name = parts[0].strip(), parts[1].strip()
+                        else:
+                            parts = line.split(None, 1)
+                            if len(parts) == 2:
+                                code, name = parts[0].strip(), parts[1].strip()
+                            else:
+                                continue
+                        if code and name and code.upper() not in _PNP_DB_CACHE:
+                            _PNP_DB_CACHE[code.upper()] = name
+                if _PNP_DB_CACHE:
+                    break
+            except Exception:
+                continue
+
+    if not _PNP_DB_CACHE and os.path.exists("/.flatpak-info") and shutil.which("flatpak-spawn"):
+        for host_path in ["/usr/share/hwdata/pnp.ids", "/usr/share/misc/pnp.ids", "/var/lib/misc/pnp.ids"]:
+            try:
+                res = subprocess.run(
+                    ["flatpak-spawn", "--host", "cat", host_path],
+                    capture_output=True,
+                    text=True,
+                    errors="ignore"
+                )
+                if res.returncode == 0 and res.stdout:
+                    for line in res.stdout.splitlines():
+                        line = line.strip()
+                        if not line or line.startswith("#"):
+                            continue
+                        parts = line.split("\t", 1) if "\t" in line else line.split(None, 1)
+                        if len(parts) == 2:
+                            code, name = parts[0].strip().upper(), parts[1].strip()
+                            if code and code not in _PNP_DB_CACHE:
+                                _PNP_DB_CACHE[code] = name
+                    if _PNP_DB_CACHE:
+                        break
+            except Exception:
+                continue
+
+    return _PNP_DB_CACHE
+
+def get_vendor_name(pnp_code: str) -> str:
+    if not pnp_code:
+        return ""
+    db = get_pnp_db()
+    return db.get(pnp_code.upper().strip(), "")
+
+def clean_device_name(raw_model: str, vendor: str, pnp: str = "") -> str:
+    if not raw_model:
+        return ""
+
+    vendor_ident_words = set()
+    all_vendor_words = set()
+
+    if vendor:
+        words = [w.lower() for w in re.findall(r"[A-Za-z0-9]+", vendor)]
+        filtered = [w for w in words if w not in GENERIC_WORDS]
+        if not filtered:
+            filtered = words
+        for w in filtered:
+            vendor_ident_words.add(w)
+            if w.endswith("tek") and len(w) > 5:
+                vendor_ident_words.add(w[:-3])
+        if len(filtered) >= 2:
+            initials = "".join(w[0] for w in filtered)
+            if len(initials) >= 2:
+                vendor_ident_words.add(initials)
+        for w in words:
+            all_vendor_words.add(w)
+
+    if pnp:
+        vendor_ident_words.add(pnp.lower())
+        all_vendor_words.add(pnp.lower())
+
+    s = raw_model.strip()
+    stripped_any = False
+
+    while True:
+        m = re.match(r"^([A-Za-z0-9]+)([\s\-_:/]*)(.*)$", s)
+        if not m:
+            break
+        word, sep, rest = m.group(1), m.group(2), m.group(3)
+        wl = word.lower()
+
+        if not stripped_any:
+            if wl in vendor_ident_words:
+                stripped_any = True
+                if rest.strip():
+                    s = rest.strip()
+                    continue
+                else:
+                    return ""
+            break
+        else:
+            if wl in all_vendor_words or wl in GENERIC_WORDS:
+                if rest.strip():
+                    s = rest.strip()
+                    continue
+                else:
+                    return ""
+            break
+
+    return s
+
+def _resolve_cmd(cmd_list):
+    cmd = list(cmd_list)
+    if not shutil.which(cmd[0]) and os.path.exists("/.flatpak-info") and shutil.which("flatpak-spawn"):
+        return ["flatpak-spawn", "--host"] + cmd
+    return cmd
 
 def parse_edid(data):
     if len(data) < 128:
@@ -35,9 +173,14 @@ def parse_edid(data):
         block = data[offset:offset+18]
         if len(block) == 18 and block[0:3] == b"\x00\x00\x00":
             tag = block[3]
-            if tag in (0xFC, 0xFE):
-                txt = block[5:].split(b"\x0A")[0].decode("latin1", errors="ignore").strip()
-                if txt and not model_name:
+            if tag == 0xFC:
+                txt = block[5:].split(b"\x0A")[0].split(b"\x00")[0].decode("latin1", errors="ignore").strip()
+                if txt:
+                    model_name = txt
+                    break
+            elif tag == 0xFE and not model_name:
+                txt = block[5:].split(b"\x0A")[0].split(b"\x00")[0].decode("latin1", errors="ignore").strip()
+                if txt:
                     model_name = txt
     return pnp, model_name
 
@@ -64,6 +207,25 @@ def get_aliases():
             pass
     return {}
 
+def set_alias(connector: str, alias: str):
+    os.makedirs(CONFIG_DIR, exist_ok=True)
+    aliases = get_aliases()
+    alias = alias.strip()
+    if alias:
+        aliases[connector] = alias
+    else:
+        aliases.pop(connector, None)
+    with open(ALIASES_FILE, "w") as f:
+        json.dump(aliases, f, indent=2)
+
+def clear_alias(connector: str):
+    if os.path.exists(ALIASES_FILE):
+        aliases = get_aliases()
+        if connector in aliases:
+            aliases.pop(connector, None)
+            with open(ALIASES_FILE, "w") as f:
+                json.dump(aliases, f, indent=2)
+
 def is_presentation_active():
     if os.path.exists(PID_FILE):
         try:
@@ -84,13 +246,13 @@ def set_presentation(enable: bool):
     if enable:
         if not is_presentation_active():
             proc = subprocess.Popen(
-                [
+                _resolve_cmd([
                     "systemd-inhibit",
                     "--what=idle:sleep",
                     "--who=PlasmaScreenManager",
                     "--why=Presentation Mode - Keep Screen Awake",
                     "sleep", "infinity"
-                ],
+                ]),
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
@@ -117,7 +279,7 @@ def set_presentation(enable: bool):
 
 def get_status():
     try:
-        ks_out = subprocess.check_output(["kscreen-doctor", "-j"], stderr=subprocess.DEVNULL)
+        ks_out = subprocess.check_output(_resolve_cmd(["kscreen-doctor", "-j"]), stderr=subprocess.DEVNULL)
         ks_data = json.loads(ks_out)
     except Exception as e:
         return {"error": f"Failed to query kscreen-doctor: {str(e)}", "screens": []}
@@ -135,19 +297,18 @@ def get_status():
         edid = edids.get(conn, {})
         pnp = edid.get("pnp", "")
         raw_model = edid.get("model", "")
-        vendor = PNP_VENDORS.get(pnp, pnp)
+        vendor = get_vendor_name(pnp)
 
-        if conn in aliases and aliases[conn].strip():
-            display_name = aliases[conn].strip()
-        elif raw_model:
-            if vendor and vendor.lower() not in raw_model.lower():
-                display_name = f"{vendor} {raw_model}"
-            else:
-                display_name = raw_model
+        device_name = clean_device_name(raw_model, vendor, pnp)
+        if device_name:
+            default_name = device_name
         elif vendor:
-            display_name = f"{vendor} Display"
+            default_name = vendor
         else:
-            display_name = f"Display {conn}"
+            default_name = f"Display {conn}"
+
+        is_custom = bool(conn in aliases and aliases[conn].strip())
+        display_name = aliases[conn].strip() if is_custom else default_name
 
         curr_id = str(out.get("currentModeId"))
         mode_str = ""
@@ -167,6 +328,8 @@ def get_status():
             "id": out.get("id"),
             "connector": conn,
             "name": display_name,
+            "defaultName": default_name,
+            "isCustomName": is_custom,
             "rawModel": raw_model,
             "vendor": vendor,
             "enabled": enabled,
@@ -192,12 +355,27 @@ def main():
 
     if cmd == "status":
         print(json.dumps(get_status()))
+    elif cmd == "set-alias":
+        if len(sys.argv) < 3:
+            print(json.dumps({"success": False, "error": "Usage: set-alias <connector> [alias]"}))
+            sys.exit(1)
+        connector = sys.argv[2]
+        alias = " ".join(sys.argv[3:]).strip() if len(sys.argv) > 3 else ""
+        set_alias(connector, alias)
+        print(json.dumps(get_status()))
+    elif cmd == "clear-alias":
+        if len(sys.argv) < 3:
+            print(json.dumps({"success": False, "error": "Usage: clear-alias <connector>"}))
+            sys.exit(1)
+        connector = sys.argv[2]
+        clear_alias(connector)
+        print(json.dumps(get_status()))
     elif cmd == "set-primary":
         if len(sys.argv) < 3:
             print(json.dumps({"success": False, "error": "Missing connector name"}))
             sys.exit(1)
         connector = sys.argv[2]
-        subprocess.run(["kscreen-doctor", f"output.{connector}.priority.1"], check=False)
+        subprocess.run(_resolve_cmd(["kscreen-doctor", f"output.{connector}.priority.1"]), check=False)
         print(json.dumps(get_status()))
     elif cmd == "set-enabled":
         if len(sys.argv) < 4:
@@ -220,7 +398,7 @@ def main():
                 sys.exit(1)
 
         action = "enable" if enable else "disable"
-        subprocess.run(["kscreen-doctor", f"output.{connector}.{action}"], check=False)
+        subprocess.run(_resolve_cmd(["kscreen-doctor", f"output.{connector}.{action}"]), check=False)
         print(json.dumps(get_status()))
     elif cmd == "toggle-presentation":
         active = is_presentation_active()

@@ -16,6 +16,7 @@ PlasmoidItem {
 
     property var displayList: []
     property bool presentationActive: false
+    property bool isEditingName: false
     
     // Fetch Modes: "none", "shy" (silent background), "imposing" (dimmed + spinning + banner)
     property string fetchMode: "none"
@@ -131,6 +132,15 @@ PlasmoidItem {
         runCommand("set-enabled " + connector + " " + nextState, "imposing");
     }
 
+    function setScreenAlias(connector, alias) {
+        var safeAlias = alias.replace(/'/g, "'\\''");
+        runCommand("set-alias " + connector + " '" + safeAlias + "'", "imposing");
+    }
+
+    function clearScreenAlias(connector) {
+        runCommand("clear-alias " + connector, "imposing");
+    }
+
     function togglePresentation() {
         runCommand("toggle-presentation", "imposing");
     }
@@ -141,13 +151,14 @@ PlasmoidItem {
     }
 
     // Periodic Background Sync: 30-second interval with SHY state (no dimming, no spinner, unclickable for 75ms)
+    // Pauses when user is actively editing a screen name
     Timer {
         id: periodicTimer
         interval: 30000 // 30 seconds
-        running: true
+        running: !root.isEditingName
         repeat: true
         onTriggered: {
-            if (!root.isFetching) {
+            if (!root.isFetching && !root.isEditingName) {
                 root.fetchStatus("shy");
             }
         }
@@ -184,9 +195,9 @@ PlasmoidItem {
         // Hover detection: Auto-refresh with IMPOSING state when mouse enters widget on desktop
         HoverHandler {
             id: mainHover
-            enabled: root.autoRefreshOnHover
+            enabled: root.autoRefreshOnHover && !root.isEditingName
             onHoveredChanged: {
-                if (hovered && !root.isFetching) {
+                if (hovered && !root.isFetching && !root.isEditingName) {
                     root.fetchStatus("imposing");
                 }
             }
@@ -354,6 +365,7 @@ PlasmoidItem {
                     visible: root.displayList.length > 0
 
                     Repeater {
+                        id: cardsRepeater
                         model: root.displayList
 
                         ScreenCard {
@@ -362,6 +374,19 @@ PlasmoidItem {
                             isImposing: root.isImposing
                             onRequestSetPrimary: (connector) => root.setPrimaryScreen(connector)
                             onRequestToggleEnabled: (connector, currentEnabled) => root.toggleScreenEnabled(connector, currentEnabled)
+                            onRequestSetAlias: (connector, alias) => root.setScreenAlias(connector, alias)
+                            onRequestClearAlias: (connector) => root.clearScreenAlias(connector)
+                            onIsEditingNameChanged: {
+                                var anyEditing = false;
+                                for (var i = 0; i < cardsRepeater.count; i++) {
+                                    var card = cardsRepeater.itemAt(i);
+                                    if (card && card.isEditingName) {
+                                        anyEditing = true;
+                                        break;
+                                    }
+                                }
+                                root.isEditingName = anyEditing;
+                            }
                         }
                     }
                 }

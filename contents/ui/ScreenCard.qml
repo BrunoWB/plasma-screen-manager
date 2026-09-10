@@ -8,9 +8,13 @@ Item {
     property var screenData: ({})
     property bool isFetching: false
     property bool isImposing: false
+    property bool isEditingName: false
+    property bool resettingDefault: false
 
     signal requestSetPrimary(string connector)
     signal requestToggleEnabled(string connector, bool currentEnabled)
+    signal requestSetAlias(string connector, string alias)
+    signal requestClearAlias(string connector)
 
     implicitWidth: 216
     implicitHeight: 162
@@ -19,7 +23,57 @@ Item {
     readonly property bool isPrimary: screenData && screenData.isPrimary !== undefined ? screenData.isPrimary : false
     readonly property string connector: screenData && screenData.connector ? screenData.connector : ""
     readonly property string displayName: screenData && screenData.name ? screenData.name : connector
+    readonly property string defaultName: screenData && screenData.defaultName ? screenData.defaultName : displayName
+    readonly property bool isCustomName: screenData && screenData.isCustomName !== undefined ? screenData.isCustomName : false
     readonly property string modeStr: screenData && screenData.mode ? screenData.mode : ""
+
+    function startEditing() {
+        if (isFetching) return;
+        isEditingName = true;
+        nameInput.text = displayName;
+        nameInput.forceActiveFocus();
+        nameInput.selectAll();
+    }
+
+    function commitEdit() {
+        if (!isEditingName) return;
+        isEditingName = false;
+        var trimmed = nameInput.text.trim();
+        if (trimmed === "") {
+            nameInput.text = defaultName;
+            cardRoot.requestClearAlias(connector);
+        } else if (trimmed !== displayName) {
+            if (trimmed === defaultName) {
+                cardRoot.requestClearAlias(connector);
+            } else {
+                cardRoot.requestSetAlias(connector, trimmed);
+            }
+        }
+    }
+
+    function cancelEdit() {
+        if (!isEditingName) return;
+        isEditingName = false;
+        nameInput.text = displayName;
+    }
+
+    function clearToDefault() {
+        resettingDefault = true;
+        isEditingName = false;
+        nameInput.text = defaultName;
+        cardRoot.requestClearAlias(connector);
+        resettingDefault = false;
+    }
+
+    onDisplayNameChanged: {
+        if (!isEditingName) {
+            nameInput.text = displayName;
+        }
+    }
+
+    Component.onDestruction: {
+        isEditingName = false;
+    }
 
     ColumnLayout {
         anchors.fill: parent
@@ -106,17 +160,141 @@ Item {
 
                 Item { Layout.fillHeight: true }
 
-                // Centered Device Name
-                Text {
-                    id: nameText
+                // Centered Device Name Area
+                Item {
+                    id: nameArea
                     Layout.fillWidth: true
-                    text: displayName.toUpperCase()
-                    color: isEnabled ? "#ffffff" : "#556677"
-                    font.pixelSize: 11
-                    font.bold: true
-                    horizontalAlignment: Text.AlignHCenter
-                    elide: Text.ElideRight
-                    maximumLineCount: 1
+                    Layout.preferredHeight: 22
+
+                    HoverHandler {
+                        id: nameAreaHover
+                    }
+
+                    // Centered Device Name Label
+                    Text {
+                        id: nameText
+                        visible: !cardRoot.isEditingName
+                        anchors.centerIn: parent
+                        width: Math.min(implicitWidth, parent.width - 44)
+                        text: displayName
+                        color: isEnabled ? "#ffffff" : "#556677"
+                        font.pixelSize: 11
+                        font.bold: true
+                        horizontalAlignment: Text.AlignHCenter
+                        elide: Text.ElideRight
+                        maximumLineCount: 1
+
+                        MouseArea {
+                            id: nameLabelMouse
+                            anchors.fill: parent
+                            anchors.topMargin: -3
+                            anchors.bottomMargin: -3
+                            anchors.leftMargin: -6
+                            anchors.rightMargin: -6
+                            cursorShape: Qt.IBeamCursor
+                            hoverEnabled: true
+                            enabled: !cardRoot.isEditingName && !isFetching
+                            onClicked: cardRoot.startEditing()
+                        }
+                    }
+
+                    // Inline Name Editor
+                    Rectangle {
+                        id: editBg
+                        visible: cardRoot.isEditingName
+                        anchors.centerIn: parent
+                        width: Math.min(Math.max(nameInput.implicitWidth + 16, 70), parent.width - 44)
+                        height: 20
+                        radius: 4
+                        color: "#18202c"
+                        border.color: "#00c8ff"
+                        border.width: 1
+
+                        TextInput {
+                            id: nameInput
+                            anchors.fill: parent
+                            anchors.leftMargin: 6
+                            anchors.rightMargin: 6
+                            verticalAlignment: TextInput.AlignVCenter
+                            horizontalAlignment: TextInput.AlignHCenter
+                            text: displayName
+                            color: "#ffffff"
+                            font.pixelSize: 11
+                            font.bold: true
+                            selectByMouse: true
+                            clip: true
+
+                            Keys.onReturnPressed: cardRoot.commitEdit()
+                            Keys.onEnterPressed: cardRoot.commitEdit()
+                            Keys.onEscapePressed: (event) => {
+                                cardRoot.cancelEdit();
+                                event.accepted = true;
+                            }
+
+                            onActiveFocusChanged: {
+                                if (!activeFocus && cardRoot.isEditingName && !cardRoot.resettingDefault) {
+                                    cardRoot.commitEdit();
+                                }
+                            }
+                        }
+                    }
+
+                    // Clear / Reset to default 'X' button
+                    Item {
+                        id: xBtn
+                        width: 16
+                        height: 16
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.left: cardRoot.isEditingName ? editBg.right : nameText.right
+                        anchors.leftMargin: 4
+                        z: 10
+
+                        opacity: (nameAreaHover.hovered || nameLabelMouse.containsMouse || clearMouse.containsMouse || cardRoot.isEditingName) ? 1.0 : 0.0
+                        visible: opacity > 0
+                        Behavior on opacity {
+                            NumberAnimation { duration: 180; easing.type: Easing.InOutQuad }
+                        }
+
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: 8
+                            color: clearMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(1, 1, 1, 0.08)
+                            border.color: clearMouse.containsMouse ? "#8899aa" : "transparent"
+                            border.width: 1
+
+                            Image {
+                                anchors.centerIn: parent
+                                source: "assets/clear.svg"
+                                sourceSize.width: 9
+                                sourceSize.height: 9
+                            }
+                        }
+
+                        QQC2.ToolTip.visible: clearMouse.containsMouse && !isFetching
+                        QQC2.ToolTip.text: "Clear to default (" + cardRoot.defaultName + ")"
+
+                        MouseArea {
+                            id: clearMouse
+                            anchors.fill: parent
+                            hoverEnabled: !isFetching
+                            cursorShape: isFetching ? Qt.ArrowCursor : Qt.PointingHandCursor
+                            enabled: !isFetching
+                            onPressed: {
+                                cardRoot.resettingDefault = true;
+                            }
+                            onReleased: {
+                                cardRoot.resettingDefault = false;
+                            }
+                            onCanceled: {
+                                cardRoot.resettingDefault = false;
+                            }
+                            onClicked: {
+                                if (!isFetching) {
+                                    cardRoot.clearToDefault();
+                                }
+                            }
+                        }
+                    }
                 }
 
                 // Centered Resolution & Refresh Rate
