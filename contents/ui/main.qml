@@ -36,6 +36,18 @@ PlasmoidItem {
         messageTimer.restart();
     }
 
+    property double fetchStartTime: 0
+    property int minFetchDuration: 0
+
+    Timer {
+        id: minDurationTimer
+        repeat: false
+        onTriggered: {
+            root.fetchMode = "none";
+            root.lastFetchTime = Date.now();
+        }
+    }
+
     Plasma5Support.DataSource {
         id: executable
         engine: "executable"
@@ -45,32 +57,39 @@ PlasmoidItem {
         onNewData: (sourceName, data) => {
             var stdout = data["stdout"] || "";
             disconnectSource(sourceName);
-            root.fetchMode = "none";
 
-            if (!stdout || stdout.trim().length === 0) {
-                return;
+            if (stdout && stdout.trim().length > 0) {
+                try {
+                    var res = JSON.parse(stdout);
+                    if (res.screens !== undefined) {
+                        root.displayList = res.screens;
+                    }
+                    if (res.presentationMode !== undefined) {
+                        root.presentationActive = res.presentationMode;
+                    }
+                    if (res.error) {
+                        root.showNotice(res.error);
+                    }
+                } catch (err) {
+                    console.error("Failed to parse JSON response:", err, stdout);
+                }
             }
 
-            try {
-                var res = JSON.parse(stdout);
-                if (res.screens !== undefined) {
-                    root.displayList = res.screens;
-                }
-                if (res.presentationMode !== undefined) {
-                    root.presentationActive = res.presentationMode;
-                }
-                if (res.error) {
-                    root.showNotice(res.error);
-                }
+            var elapsed = Date.now() - root.fetchStartTime;
+            if (root.minFetchDuration > 0 && elapsed < root.minFetchDuration) {
+                minDurationTimer.interval = root.minFetchDuration - elapsed;
+                minDurationTimer.start();
+            } else {
+                root.fetchMode = "none";
                 root.lastFetchTime = Date.now();
-            } catch (err) {
-                console.error("Failed to parse JSON response:", err, stdout);
             }
         }
     }
 
-    function runCommand(args, mode) {
+    function runCommand(args, mode, minDuration) {
         root.fetchMode = mode || "imposing";
+        root.fetchStartTime = Date.now();
+        root.minFetchDuration = minDuration || 0;
         var cmd = "python3 \"" + root.scriptPath + "\" " + args + " # " + Date.now();
         executable.connectSource(cmd);
     }
@@ -84,7 +103,13 @@ PlasmoidItem {
             return;
         }
         
-        runCommand("status", reqMode);
+        runCommand("status", reqMode, 0);
+    }
+
+    function forceManualRefresh() {
+        if (!root.isFetching) {
+            runCommand("status", "imposing", 500);
+        }
     }
 
     function setPrimaryScreen(connector) {
@@ -193,12 +218,12 @@ PlasmoidItem {
                     font.letterSpacing: 0.2
                 }
 
-                // Status Pill: only shows on IMPOSING state or on error notice (never on shy)
+                // Notice Pill: only shows on warning/error message
                 Rectangle {
-                    visible: root.isImposing || root.statusMessage.length > 0
+                    visible: root.statusMessage.length > 0
                     radius: 8
-                    color: root.statusMessage.length > 0 ? Qt.rgba(1.0, 0.2, 0.3, 0.15) : Qt.rgba(0, 0.8, 1.0, 0.14)
-                    border.color: root.statusMessage.length > 0 ? "#ff5555" : Qt.rgba(0, 0.8, 1.0, 0.35)
+                    color: Qt.rgba(1.0, 0.2, 0.3, 0.15)
+                    border.color: "#ff5555"
                     border.width: 1
                     implicitWidth: statusText.implicitWidth + 14
                     implicitHeight: 20
@@ -208,25 +233,13 @@ PlasmoidItem {
                         NumberAnimation { duration: 250; easing.type: Easing.InOutQuad }
                     }
 
-                    RowLayout {
+                    Text {
+                        id: statusText
                         anchors.centerIn: parent
-                        spacing: 5
-
-                        Rectangle {
-                            visible: root.isImposing && root.statusMessage.length === 0
-                            width: 6
-                            height: 6
-                            radius: 3
-                            color: "#00e5ff"
-                        }
-
-                        Text {
-                            id: statusText
-                            text: root.statusMessage.length > 0 ? root.statusMessage : "Fetching recent data..."
-                            color: root.statusMessage.length > 0 ? "#ff7777" : "#00e5ff"
-                            font.pixelSize: 10
-                            font.bold: true
-                        }
+                        text: root.statusMessage
+                        color: "#ff7777"
+                        font.pixelSize: 10
+                        font.bold: true
                     }
                 }
 
@@ -294,13 +307,13 @@ PlasmoidItem {
                         sourceSize.width: 15
                         sourceSize.height: 15
 
-                        // Only spin when imposing (manual click or hover), NOT on shy background poll
+                        // Spins during any fetch (both shy background and imposing hover)
                         RotationAnimation on rotation {
                             from: 0
                             to: 360
                             duration: 700
                             loops: Animation.Infinite
-                            running: root.isImposing
+                            running: root.isFetching
                         }
                     }
 
@@ -314,7 +327,7 @@ PlasmoidItem {
                         cursorShape: root.isFetching ? Qt.ArrowCursor : Qt.PointingHandCursor
                         onClicked: {
                             if (!root.isFetching) {
-                                root.fetchStatus("imposing");
+                                root.forceManualRefresh();
                             }
                         }
                     }
