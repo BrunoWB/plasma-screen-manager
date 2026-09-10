@@ -60,7 +60,7 @@ Designed as a modern, productive replacement for standard display applets, it br
 Clone the repository and run the installation script:
 
 ```bash
-git clone https://github.com/Scyan/plasma-screen-manager.git
+git clone https://github.com/BrunoWB/plasma-screen-manager.git
 cd plasma-screen-manager
 ./install.sh
 ```
