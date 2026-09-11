@@ -84,6 +84,25 @@ The script automatically:
 
 ---
 
+## Keyboard Shortcut & Floating Overlay (<kbd>Cmd</kbd> + <kbd>P</kbd> / <kbd>Meta</kbd> + <kbd>P</kbd>)
+
+Screen Manager can be toggled on demand as a borderless floating overlay using the standard display-switching shortcut (<kbd>Cmd</kbd> + <kbd>P</kbd> or <kbd>Meta</kbd> + <kbd>P</kbd>), replacing KDE's default display OSD.
+
+- **Frameless Overlay**: Appears on top with no titlebar, borders, or taskbar clutter.
+- **Auto-Dismiss**: Click anywhere outside the overlay or press <kbd>Esc</kbd> to immediately dismiss it.
+- **Native D-Bus Integration**: Seamlessly intercepts KDE's display switch events via a lightweight user service shim.
+
+### Automatic Setup
+Run the installer or shortcut script:
+```bash
+./install.sh
+# or configure shortcuts only:
+./contents/scripts/setup_shortcut.sh
+```
+This automatically sets up KWin window rules, registers the D-Bus service replacement, and binds <kbd>Cmd</kbd> + <kbd>P</kbd> / <kbd>Meta</kbd> + <kbd>P</kbd> and the hardware Display key to Screen Manager.
+
+---
+
 ## Contributing
 
 Pull requests, issues, and feature suggestions are warmly welcome!

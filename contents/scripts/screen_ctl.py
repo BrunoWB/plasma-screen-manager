@@ -375,8 +375,11 @@ def main():
             print(json.dumps({"success": False, "error": "Missing connector name"}))
             sys.exit(1)
         connector = sys.argv[2]
-        subprocess.run(_resolve_cmd(["kscreen-doctor", f"output.{connector}.priority.1"]), check=False)
-        print(json.dumps(get_status()))
+        res = subprocess.run(_resolve_cmd(["kscreen-doctor", f"output.{connector}.priority.1"]), capture_output=True, text=True, check=False)
+        status = get_status()
+        if res.returncode != 0:
+            status["error"] = res.stderr.strip() or f"kscreen-doctor failed with exit code {res.returncode}"
+        print(json.dumps(status))
     elif cmd == "set-enabled":
         if len(sys.argv) < 4:
             print(json.dumps({"success": False, "error": "Usage: set-enabled <connector> <1|0>"}))
@@ -398,8 +401,11 @@ def main():
                 sys.exit(1)
 
         action = "enable" if enable else "disable"
-        subprocess.run(_resolve_cmd(["kscreen-doctor", f"output.{connector}.{action}"]), check=False)
-        print(json.dumps(get_status()))
+        res = subprocess.run(_resolve_cmd(["kscreen-doctor", f"output.{connector}.{action}"]), capture_output=True, text=True, check=False)
+        status = get_status()
+        if res.returncode != 0:
+            status["error"] = res.stderr.strip() or f"kscreen-doctor failed with exit code {res.returncode}"
+        print(json.dumps(status))
     elif cmd == "toggle-presentation":
         active = is_presentation_active()
         new_state = set_presentation(not active)
